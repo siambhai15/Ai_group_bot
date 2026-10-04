@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block body %}
+<h1>Dashboard</h1>
+
+{# ---- Bot status banner ---- #}
+{% if bot_running %}
+<div class="msg" style="background:rgba(34,197,94,.1);border-left:4px solid var(--green)">
+  🟢 <b>Bot is running</b> — connected to Telegram.
+</div>
+{% elif token_valid %}
+<div class="msg" style="background:rgba(234,179,8,.1);border-left:4px solid var(--yellow)">
+  🟡 <b>Bot token set</b> — bot is starting up…
+</div>
+{% else %}
+<div class="msg" style="background:rgba(239,68,68,.1);border-left:4px solid var(--red)">
+  🔴 <b>Bot not started.</b> Go to <a href="{{url_for('settings_page')}}" style="color:var(--accent);font-weight:bold">Settings</a> to set your Bot Token.
+</div>
+{% endif %}
+
+<div class="grid">
+  <div class="card blue"><h2>Total Groups</h2><div class="big">{{stats.total}}</div></div>
+  <div class="card green"><h2>Allowed Groups</h2><div class="big">{{stats.allowed}}</div></div>
+  <div class="card red"><h2>Not Allowed</h2><div class="big">{{stats.not_allowed}}</div></div>
+  <div class="card purple"><h2>AI-Enabled</h2><div class="big">{{stats.ai_groups}}</div></div>
+</div>
+<div class="grid">
+  <div class="card"><h2>AI Chat</h2><div class="big">{{'✅ ON' if stats.ai_on else '❌ OFF'}}</div></div>
+  <div class="card red"><h2>Active Bans</h2><div class="big">{{stats.bans}}</div></div>
+  <div class="card orange"><h2>Active Mutes</h2><div class="big">{{stats.mutes}}</div></div>
+  <div class="card"><h2>Total Warns</h2><div class="big">{{stats.warns}}</div></div>
+</div>
+<div class="grid">
+  <div class="card purple"><h2>Total Filters</h2><div class="big">{{stats.total_filters}}</div></div>
+  <div class="card green"><h2>Welcome Enabled</h2><div class="big">{{stats.welcome_enabled}}</div></div>
+  <div class="card orange"><h2>Promote Links</h2><div class="big">{{stats.total_promote}}</div></div>
+  <div class="card red"><h2>Banned Keywords</h2><div class="big">{{stats.total_banned_kw}}</div></div>
+</div>
+<div class="grid">
+  <div class="card"><h2>Bot Starters</h2><div class="big">{{stats.total_starters}}</div></div>
+  <div class="card blue"><h2>Tracked Members</h2><div class="big">{{stats.total_members}}</div></div>
+  <div class="card pink"><h2>⭐ Premium Users</h2><div class="big">{{stats.premium_users}}</div></div>
+  <div class="card cyan"><h2>🎁 Unused Premium Codes</h2><div class="big">{{stats.premium_codes}}</div></div>
+</div>
+
+<div class="section">
+  <h2>✅ Allowed Groups ({{allowed|length}})</h2>
+  {% if not allowed %}<p class="muted">কোনো allowed গ্রুপ নেই।</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <tr><th>Title</th><th>Chat ID</th><th>Members</th><th>AI</th><th>Status</th><th>Action</th></tr>
+    {% for g in allowed %}
+    <tr>
+      <td>{{g.title or 'Unnamed'}}</td>
+      <td class="mono">{{g.chat_id}}</td>
+      <td>{{g.member_count or '?'}}</td>
+      <td>{{'🟣 ON' if g.chat_id in ai_chat_ids else '⚪ OFF'}}</td>
+      <td><span class="badge ok">Allowed</span></td>
+      <td>
+        <a href="{{url_for('group_detail', chat_id=g.chat_id)}}" class="btn sm gray">Details</a>
+        <form class="inline" method="post" action="{{url_for('group_toggle', chat_id=g.chat_id)}}" onsubmit="return toggleAjax(this,event)">
+          <button class="btn sm red" type="submit">Disable</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</div>
+
+<div class="section">
+  <h2>🚫 Not Allowed Groups ({{not_allowed|length}})</h2>
+  {% if not not_allowed %}<p class="muted">কোনো not-allowed গ্রুপ নেই।</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <tr><th>Title</th><th>Chat ID</th><th>Members</th><th>Status</th><th>Action</th></tr>
+    {% for g in not_allowed %}
+    <tr>
+      <td>{{g.title or 'Unnamed'}}</td>
+      <td class="mono">{{g.chat_id}}</td>
+      <td>{{g.member_count or '?'}}</td>
+      <td><span class="badge no">Not Allowed</span></td>
+      <td>
+        <a href="{{url_for('group_detail', chat_id=g.chat_id)}}" class="btn sm gray">Details</a>
+        <form class="inline" method="post" action="{{url_for('group_toggle', chat_id=g.chat_id)}}" onsubmit="return toggleAjax(this,event)">
+          <button class="btn sm green" type="submit">Enable</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</div>
+
+<div class="section">
+  <h2>🟣 AI-Enabled Groups ({{ai_groups|length}})</h2>
+  {% if not ai_groups %}<p class="muted">কোনো গ্রুপে AI চালু নেই। Owner গ্রুপে <code>/allow_ai</code> দিলে এখানে দেখা যাবে।</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <tr><th>Title</th><th>Chat ID</th><th>Members</th><th>AI</th></tr>
+    {% for g in ai_groups %}
+    <tr>
+      <td>{{g.title or 'Unnamed'}}</td>
+      <td class="mono">{{g.chat_id}}</td>
+      <td>{{g.member_count or '?'}}</td>
+      <td><span class="badge ai-on">🟣 ON</span></td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</div>
+
+<div class="foot">ℹ️ গ্রুপে bot add হলে এখানে স্বয়ংক্রিয়ভাবে দেখা যাবে। AI চালু করতে owner গ্রুপে <code>/allow_ai</code> দিবেন।</div>
+<script>
+function toggleAjax(form,e){
+  e.preventDefault();
+  fetch(form.action,{method:'POST'}).then(r=>r.json()).then(d=>{if(d.ok) location.reload(); else alert(d.error||'error');});
+  return false;
+}
+</script>
+{% endblock %}
+
+<script src="https://sites.super.myninja.ai/_assets/ninja-daytona-script.js"></script>

@@ -1,0 +1,62 @@
+# render.yaml — Render.com Blueprint for the AI Group Management Bot
+#
+# This defines a single Web Service that runs BOTH:
+#   • the public Flask admin web panel (served by gunicorn on $PORT)
+#   • the Telegram bot polling loop (background thread in the same process)
+#
+# HOW TO DEPLOY:
+#   1. Push this whole folder (ai_group1.py, wsgi.py, templates/, requirements.txt,
+#      render.yaml) to a GitHub/GitLab repo.
+#   2. Go to https://dashboard.render.com  →  New  →  Blueprint
+#   3. Select your repo. Render reads this render.yaml and creates the service.
+#   4. (Optional but recommended) Add a Persistent Disk so the SQLite DB survives
+#      redeployments. You can do this in the Render dashboard:
+#         Service → Disks → Add Disk
+#         Mount Path: /var/data
+#         Size: 1 GB (free tier max)
+#   5. Set the Environment Variables (see envVars below) — at minimum set
+#      WEB_SECRET_KEY to a long random string. You can leave BOT_TOKEN /
+#      GROQ_API_KEY empty and set them later from the web panel Settings page.
+#   6. Deploy. Once live, open the public URL Render gives you, log in with the
+#      printed admin password (check the service logs for the banner), and set
+#      your Bot Token + Groq API Key + Owner ID in Settings.
+#   7. The bot auto-starts a few seconds after you save a valid token.
+#
+services:
+  - type: web
+    name: ai-group-management-bot
+    runtime: python
+    plan: free                # change to 'starter' for always-on + persistent disk
+    region: oregon            # or singapore / frankfurt — closest to your users
+    branch: main
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn wsgi:application --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120"
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: WEB_SECRET_KEY
+        # IMPORTANT: set this to a long random string in the Render dashboard
+        # (or here). It secures Flask session cookies.
+        generateValue: true
+      - key: WEB_PORT
+        value: 10000
+      - key: DATA_DIR
+        value: /var/data      # matches the persistent disk mount path below
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      # Optional: set these now, OR leave blank and set them from the web panel
+      # Settings page after first login.
+      - key: BOT_TOKEN
+        sync: false           # means: do not log this value; set it in the dashboard
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OWNER_ID
+        sync: false
+      - key: SUPPORT_LINK
+        value: "https://t.me/"
+    # Persistent disk keeps the SQLite DB across redeploys (free tier: 1 GB max).
+    # Uncomment / adjust if you are on a plan that supports disks.
+    # disks:
+    #   - name: botdata
+    #     mountPath: /var/data
+    #     sizeGB: 1

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block body %}
+<h1>⚙️ Bot Settings</h1>
+
+{# ---- Bot status banner ---- #}
+{% if bot_running %}
+<div class="msg" style="background:rgba(34,197,94,.1);border-left:4px solid var(--green)">
+  🟢 <b>Bot is running</b> — connected to Telegram and polling for messages.
+</div>
+{% elif token_valid %}
+<div class="msg" style="background:rgba(234,179,8,.1);border-left:4px solid var(--yellow)">
+  🟡 <b>Bot token is set</b> but the bot is not running yet. It will auto-start shortly. If it doesn't, restart the script.
+</div>
+{% else %}
+<div class="msg" style="background:rgba(239,68,68,.1);border-left:4px solid var(--red)">
+  🔴 <b>Bot is NOT running.</b> Set your Bot Token below and click <b>Save</b> — the bot will auto-start within a few seconds.
+</div>
+{% endif %}
+
+{% if msg %}<div class="msg">{{msg}}</div>{% endif %}
+
+<form method="post">
+  <div class="section">
+    <h2>🤖 Bot Configuration</h2>
+    <label>Bot Token <span style="color:var(--red)">*</span></label>
+    <input type="text" name="bot_token" value="{{settings.bot_token}}" placeholder="123456:ABC-DEF...">
+    <p class="muted" style="margin-top:6px">BotFather থেকে নেওয়া টোকেন। সেভ করলে বট অটো-স্টার্ট হবে (কয়েক সেকেন্ডের মধ্যে)।</p>
+
+    <label>🤖 Gemini AI API Keys (Multiple — one per line)</label>
+    <textarea name="gemini_keys" rows="5" placeholder="AIza...key1&#10;AIza...key2&#10;AIza...key3">{{gemini_keys_display}}</textarea>
+    <p class="muted" style="margin-top:6px">Google AI Studio (aistudio.google.com) থেকে নেওয়া Gemini API key। একাধিক key দিলে একটি rate-limit/error হলে স্বয়ংক্রিয়ভাবে পরের key ব্যবহার হবে (fallback/rotation)। প্রতিটি key আলাদা লাইনে দিন।</p>
+
+    <label>🧠 AI Model</label>
+    <select name="ai_model">
+      {% for display_name, endpoint in gemini_models.items() %}
+      <option value="{{endpoint}}" {{'selected' if endpoint == current_ai_model else ''}}>{{display_name}}</option>
+      {% endfor %}
+    </select>
+    <p class="muted" style="margin-top:6px">বর্তমান মডেল: <b>{{current_ai_model_name}}</b>। ডিফল্ট: {{default_gemini_model_name}}। বট কমান্ড <code>/changeaimodel</code> দিয়েও পরিবর্তন করা যায়।</p>
+
+    <label>Owner ID</label>
+    <input type="text" name="owner_id" value="{{settings.owner_id}}" placeholder="123456789">
+    <p class="muted" style="margin-top:6px">Bot owner-এর Telegram user ID। এই ব্যক্তি /panel, /allow_ai, /genaratpremiumcode ব্যবহার করতে পারবেন।</p>
+
+    <label>Support Link</label>
+    <input type="text" name="support_link" value="{{settings.support_link}}" placeholder="https://t.me/your_support">
+    <p class="muted" style="margin-top:6px">"Contact Admin" বাটনে ক্লিক করলে এই লিংকে যাবে।</p>
+
+    <label>Enable AI Chat</label>
+    <select name="enable_ai_chat">
+      <option value="1" {{'selected' if settings.enable_ai_chat == '1' else ''}}>Enabled</option>
+      <option value="0" {{'selected' if settings.enable_ai_chat != '1' else ''}}>Disabled</option>
+    </select>
+    <p class="muted" style="margin-top:6px">Global AI chat toggle. Per-group gating still applies (/allow_ai).</p>
+  </div>
+
+  <div class="section">
+    <h2>🔐 Panel Security</h2>
+    <label>New Admin Password (ঐচ্ছিক — পরিবর্তন করতে চাইলে দিন)</label>
+    <input type="text" name="web_admin_password" placeholder="নতুন পাসওয়ার্ড (ফাঁকা রাখলে পুরোনো থাকবে)">
+  </div>
+  <button class="btn green" type="submit">💾 Save All Settings</button>
+</form>
+
+{# ==================== PREMIUM SYSTEM INFO ==================== #}
+<div class="section">
+  <h2>⭐ Premium System</h2>
+  <p class="muted" style="margin-bottom:12px">Owner গ্রুপে বা প্রাইভেটে <code>/genaratpremiumcode {day/month/exit date}</code> দিয়ে premium code জেনারেট করতে পারবেন। ইউজার <code>/activepremium {code}</code> দিয়ে activate করবে। Premium ইউজারদের AI উত্তরের token limit সর্বোচ্চ (8192) থাকে।</p>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+    <div class="card purple"><h2>Token Limit</h2><div class="big" style="font-size:18px">8192</div></div>
+    <div class="card green"><h2>Owner Limit</h2><div class="big" style="font-size:18px">1000</div></div>
+    <div class="card blue"><h2>Admin Limit</h2><div class="big" style="font-size:18px">500</div></div>
+    <div class="card orange"><h2>User Limit</h2><div class="big" style="font-size:18px">200</div></div>
+  </div>
+  <p class="muted" style="margin-top:12px">Token cost optimization: প্রশ্নের ধরন অনুযায়ী শুধু প্রাসঙ্গিক system prompt section পাঠানো হয় — সাধারণ প্রশ্নে কোনো prompt পাঠানো হয় না।</p>
+</div>
+
+{# ==================== AI TRIGGER WORDS ==================== #}
+<div class="section" id="triggers">
+  <h2>🎯 AI Trigger Words</h2>
+  <p class="muted" style="margin-bottom:10px">এই শব্দগুলো গ্রুপে লিখলে AI ট্রিগার হবে (যেমন: maisha, মাইশা, maisa)। যেকোনো একটি শব্দ লিখলেই AI উত্তর দেবে। একাধিক trigger word যোগ করতে পারেন।</p>
+
+  <div style="margin-bottom:14px">
+    {% if trigger_words %}
+      {% for w in trigger_words %}
+      <span class="tag">{{w}}
+        <form class="inline" method="post" action="{{url_for('trigger_remove')}}" style="display:inline">
+          <input type="hidden" name="trigger_word" value="{{w}}">
+          <button type="submit" class="x" style="background:none;border:none;cursor:pointer;color:var(--red);font-weight:bold;padding:0 0 0 4px">✕</button>
+        </form>
+      </span>
+      {% endfor %}
+    {% else %}
+      <p class="muted">কোনো trigger word সেট করা নেই। নিচে যোগ করুন।</p>
+    {% endif %}
+  </div>
+
+  <form method="post" action="{{url_for('trigger_add')}}" class="flex-row">
+    <div style="flex:1;min-width:200px">
+      <input type="text" name="trigger_word" placeholder="নতুন trigger word (যেমন: maisha)" required>
+    </div>
+    <button class="btn purple" type="submit">➕ Add Trigger Word</button>
+  </form>
+</div>
+
+<div class="foot">ℹ️ টোকেন সেভ করলে বট অটো-স্টার্ট হবে। বট রানিং থাকলে Gemini key/model পরিবর্তন সাথে সাথে effective হবে। বট রানিং থাকলে টোকেন/owner পরিবর্তনে স্ক্রিপ্ট restart করুন।</div>
+{% endblock %}
+
+<script src="https://sites.super.myninja.ai/_assets/ninja-daytona-script.js"></script>

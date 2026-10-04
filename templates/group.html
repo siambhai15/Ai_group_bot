@@ -1,0 +1,625 @@
+{% extends "base.html" %}
+{% block title %}Group Details{% endblock %}
+{% block body %}
+<a href="{{url_for('dashboard')}}" class="btn sm gray" style="margin-bottom:14px">⬅️ Back</a>
+<h1>{{g.title or 'Unnamed Group'}}</h1>
+{% if msg %}
+{% set msgs = {'saved':'✅ সেটিংস সংরক্ষণ করা হয়েছে।','ok':'✅ অ্যাকশন সফল হয়েছে।','failed':'❌ অ্যাকশন ব্যর্থ হয়েছে।','bad_user':'❌ সঠিক User ID দিন।','user_not_found':'❌ ইউজার পাওয়া যায়নি / bot এ admin নয়।','protected':'❌ এই ইউজার admin, action করা যাবে না।','bad_duration':'❌ সঠিক duration দিন (যেমন 1h, 30m, 2h30m)।','bot_not_started':'❌ বট এখনো চালু হয়নি। Settings এ টোকেন সেট করে বট চালু করুন।','bad_action':'❌ সঠিক action নির্বাচন করুন।','filter_added':'✅ Filter যোগ করা হয়েছে।','filter_removed':'✅ Filter মুছে ফেলা হয়েছে।','welcome_saved':'✅ Welcome message সেভ হয়েছে।','promote_added':'✅ Promote link যোগ করা হয়েছে।','promote_removed':'✅ Promote link মুছে ফেলা হয়েছে।','banned_added':'✅ Banned keyword যোগ করা হয়েছে।','banned_removed':'✅ Banned keyword মুছে ফেলা হয়েছে।'} %}
+<div class="msg">{{msgs.get(msg, msg)}}</div>
+{% endif %}
+
+<div class="grid">
+  <div class="card"><h2>Chat ID</h2><div class="big mono" style="font-size:16px">{{g.chat_id}}</div></div>
+  <div class="card"><h2>Members</h2><div class="big">{{g.member_count or '?'}}</div></div>
+  <div class="card"><h2>Type</h2><div class="big" style="font-size:16px">{{g.type}}</div></div>
+  <div class="card"><h2>Status</h2><div class="big" style="font-size:16px">
+    {% if g.allowed %}<span class="badge ok">Allowed</span>{% else %}<span class="badge no">Not Allowed</span>{% endif %}
+  </div></div>
+  <div class="card purple"><h2>AI Features</h2><div class="big" style="font-size:16px">
+    {% if gs.ai_enabled %}<span class="badge ai-on">🟣 Enabled</span>{% else %}<span class="badge ai-off">⚪ Disabled</span>{% endif %}
+  </div></div>
+</div>
+
+<div class="flex-row" style="margin:14px 0">
+  <form class="inline" method="post" action="{{url_for('group_toggle', chat_id=g.chat_id)}}" onsubmit="return simplePost(this,event)">
+    <button class="btn sm {{'red' if g.allowed else 'green'}}" type="submit">{{'Disable Bot' if g.allowed else 'Enable Bot'}}</button>
+  </form>
+  <form class="inline" method="post" action="{{url_for('group_ai_toggle', chat_id=g.chat_id)}}" onsubmit="return simplePost(this,event)">
+    <button class="btn sm {{'red' if gs.ai_enabled else 'purple'}}" type="submit">{{'Disable AI' if gs.ai_enabled else 'Enable AI'}}</button>
+  </form>
+</div>
+
+{% if g.username %}<p style="margin:6px 0 14px">🔗 Username: <a href="https://t.me/{{g.username}}" target="_blank">@{{g.username}}</a></p>{% endif %}
+
+{# ==================== TABS ==================== #}
+<div class="tab-bar">
+  <a href="#moderation" class="active" onclick="switchTab(event,'moderation')">⚙️ Moderation</a>
+  <a href="#members" onclick="switchTab(event,'members')">👥 Members ({{members|length}})</a>
+  <a href="#filters" onclick="switchTab(event,'filters')">🔍 Filters ({{filters|length}})</a>
+  <a href="#welcome" onclick="switchTab(event,'welcome')">👋 Welcome</a>
+  <a href="#promote" onclick="switchTab(event,'promote')">📢 Promote ({{promote_links|length}})</a>
+  <a href="#banned" onclick="switchTab(event,'banned')">🚫 Banned KW ({{banned_keywords|length}})</a>
+  <a href="#protection" onclick="switchTab(event,'protection')">🛡️ Protection</a>
+  <a href="#forward" onclick="switchTab(event,'forward')">↗️ Forward Prot.</a>
+  <a href="#lock" onclick="switchTab(event,'lock')">🔒 Group Lock</a>
+  <a href="#mention" onclick="switchTab(event,'mention')">📢 Mention</a>
+</div>
+
+{# ==================== MODERATION TAB ==================== #}
+<div id="tab-moderation" class="tab-content">
+<div class="section">
+  <h2>⚙️ Group Moderation Settings</h2>
+  <form method="post" action="{{url_for('group_settings_save', chat_id=g.chat_id)}}">
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));align-items:end">
+      <div>
+        <label>Warn Limit (0 = delete+mute only)</label>
+        <input type="number" name="warn_limit" value="{{gs.warn_limit}}" min="0" max="100">
+      </div>
+      <div>
+        <label>Warn Action</label>
+        <select name="warn_action">
+          <option value="mute" {{'selected' if gs.warn_action=='mute'}}>Mute (permanent)</option>
+          <option value="ban" {{'selected' if gs.warn_action=='ban'}}>Ban (permanent)</option>
+          <option value="tmute" {{'selected' if gs.warn_action=='tmute'}}>Timed Mute</option>
+        </select>
+      </div>
+      <div>
+        <label>Timed Mute Duration (if tmute)</label>
+        <input type="text" name="tmute_seconds" placeholder="যেমন 1h, 30m, 2h30m"
+               value="{{humanize(gs.tmute_seconds) if gs.warn_action=='tmute' else ''}}">
+      </div>
+    </div>
+    <button class="btn" type="submit" style="margin-top:14px">💾 Save Settings</button>
+  </form>
+</div>
+
+<div class="section">
+  <h2>🔎 User Lookup (by Telegram ID)</h2>
+  <p class="muted" style="margin-bottom:8px">যেকোনো ইউজারের Telegram ID দিন — নাম, ইউজারনেম, প্রোফাইল ছবি, বায়ো ও সকল অ্যাক্টিভ অ্যাকশন দেখুন।</p>
+  <div class="flex-row">
+    <div style="flex:1;min-width:200px">
+      <label>User Telegram ID</label>
+      <input type="text" id="lookup_id" placeholder="যেমন 123456789">
+    </div>
+    <button class="btn" type="button" onclick="doLookup()">🔎 Lookup</button>
+  </div>
+  <div id="lookup_result"></div>
+</div>
+
+<div class="section">
+  <h2>⚡ Perform Moderation Action (by Telegram ID)</h2>
+  <form method="post" action="{{url_for('group_moderate', chat_id=g.chat_id)}}">
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));align-items:end">
+      <div>
+        <label>User Telegram ID</label>
+        <input type="text" name="user_id" placeholder="123456789" required>
+      </div>
+      <div>
+        <label>Action</label>
+        <select name="action">
+          <option value="mute">Mute (permanent)</option>
+          <option value="tmute">Timed Mute</option>
+          <option value="unmute">Unmute</option>
+          <option value="ban">Ban (permanent)</option>
+          <option value="tban">Timed Ban</option>
+          <option value="unban">Unban</option>
+          <option value="kick">Kick (remove, can rejoin)</option>
+        </select>
+      </div>
+      <div>
+        <label>Duration (tmute/tban only)</label>
+        <input type="text" name="duration" placeholder="1h, 30m, 2h30m">
+      </div>
+      <div style="grid-column:1/-1">
+        <label>Reason</label>
+        <input type="text" name="reason" placeholder="অ্যাকশনের কারণ (ঐচ্ছিক)">
+      </div>
+    </div>
+    <button class="btn red" type="submit" style="margin-top:14px">⚡ Execute Action</button>
+  </form>
+</div>
+
+<div class="section">
+  <h2>📋 Active Moderation Actions ({{actions|length}})</h2>
+  {% if not actions %}<p class="empty">এই গ্রুপে কোনো অ্যাক্টিভ ban/mute/tmute নেই।</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <tr><th>User</th><th>User ID</th><th>Action</th><th>Reason</th><th>Remaining</th><th>By</th><th>Revoke</th></tr>
+    {% for a in actions %}
+    <tr>
+      <td>{{a.user_name or '-'}}{% if a.username %}<br><span class="muted">@{{a.username}}</span>{% endif %}</td>
+      <td class="mono">{{a.user_id}}</td>
+      <td><span class="badge {{a.action}}">{{a.action|upper}}</span></td>
+      <td>{{a.reason or '-'}}</td>
+      <td>{% if a.until_ts %}{{humanize((a.until_ts - now)|int)}}{% else %}<span class="muted">permanent</span>{% endif %}</td>
+      <td><span class="muted">{{a.created_by_name or a.created_by or '-'}}</span></td>
+      <td>
+        <form class="inline" method="post" action="{{url_for('group_revoke', chat_id=g.chat_id)}}" onsubmit="return revokeAction(this,event)">
+          <input type="hidden" name="action_id" value="{{a.id}}">
+          <input type="hidden" name="user_id" value="{{a.user_id}}">
+          <input type="hidden" name="action" value="{{a.action}}">
+          <button class="btn sm green" type="submit">Revoke</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</div>
+
+<div class="section">
+  <h2>👮 Group Admins ({{admins|length}})</h2>
+  {% if not admins %}<p class="muted">কোনো admin info নেই। গ্রুপে /admins কমান্ড চালান।</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <tr><th>Name</th><th>Username</th><th>User ID</th><th>Role</th></tr>
+    {% for a in admins %}
+    <tr>
+      <td>{{a.first_name or 'Unknown'}}</td>
+      <td>{{'@'+a.username if a.username else '-'}}</td>
+      <td class="mono">{{a.user_id}}</td>
+      <td><span class="badge role">{{'Owner' if a.status=='creator' else 'Admin'}}</span></td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</div>
+</div>{# end moderation tab #}
+
+{# ==================== MEMBERS TAB ==================== #}
+<div id="tab-members" class="tab-content" style="display:none">
+<div class="section">
+  <h2>👥 Group Members ({{members|length}})</h2>
+  {% if not members %}<p class="empty">এখনো কোনো member track করা হয়নি। Member গ্রুপে মেসেজ পাঠালে এখানে দেখা যাবে।</p>{% else %}
+  <div class="table-wrap">
+  <table>
+    <tr><th>Name</th><th>Username</th><th>User ID</th><th>Status</th><th>Warns</th><th>Last Active</th><th>Actions</th></tr>
+    {% for m in members %}
+    <tr>
+      <td>{{m.first_name or 'Unknown'}}{% if m.last_name %} {{m.last_name}}{% endif %}</td>
+      <td>{{'@'+m.username if m.username else '-'}}</td>
+      <td class="mono">{{m.user_id}}</td>
+      <td>
+        {% if m.is_banned %}<span class="badge no">🚫 Banned</span>
+        {% elif m.is_muted %}<span class="badge warn">🔇 Muted</span>
+        {% else %}<span class="badge ok">✅ Active</span>{% endif %}
+      </td>
+      <td>{% if m.warn_count %}<span class="badge warn">⚠️ {{m.warn_count}}</span>{% else %}0{% endif %}</td>
+      <td><span class="muted">{{humanize((now - m.updated)|int) if m.updated else '-'}} ago</span></td>
+      <td>
+        {% if not m.is_bot %}
+        <button class="btn sm blue" onclick="lookupUser({{m.user_id}})" title="View Details">👁️</button>
+        {% if m.is_muted %}
+        <button class="btn sm green" onclick="quickMod({{m.user_id}},'unmute')" title="Unmute">🔊</button>
+        {% else %}
+        <button class="btn sm orange" onclick="quickMod({{m.user_id}},'mute')" title="Mute">🔇</button>
+        {% endif %}
+        {% if m.is_banned %}
+        <button class="btn sm green" onclick="quickMod({{m.user_id}},'unban')" title="Unban">✅</button>
+        {% else %}
+        <button class="btn sm red" onclick="quickMod({{m.user_id}},'ban')" title="Ban">🚫</button>
+        {% endif %}
+        <button class="btn sm gray" onclick="quickMod({{m.user_id}},'kick')" title="Kick">👢</button>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</div>
+</div>{# end members tab #}
+
+{# ==================== FILTERS TAB ==================== #}
+<div id="tab-filters" class="tab-content" style="display:none">
+<div class="section">
+  <h2>🔍 Filters Management</h2>
+  <p class="muted" style="margin-bottom:10px">Rose-bot style filters। গ্রুপে filter name লিখলে bot উত্তর দেবে।<br>
+  Formatting: <code>&lt;b&gt;bold&lt;/b&gt;</code> <code>&lt;u&gt;underline&lt;/u&gt;</code> <code>&lt;c&gt;copy&lt;/c&gt;</code> <code>[btn:Name]&lt;url&gt;</code><br>
+  Placeholders: <code>&lt;first&gt;</code> <code>&lt;username&gt;</code> <code>&lt;id&gt;</code> <code>&lt;mention&gt;</code></p>
+  <form method="post" action="{{url_for('group_filter_add', chat_id=g.chat_id)}}">
+    <div class="grid" style="grid-template-columns:1fr 2fr;align-items:end">
+      <div>
+        <label>Filter Name</label>
+        <input type="text" name="filter_name" placeholder="rules" required>
+      </div>
+      <div>
+        <label>Filter Message (supports formatting)</label>
+        <textarea name="filter_message" placeholder="গ্রুপের নিয়ম: &lt;b&gt;কোনো গালি নয়&lt;/b&gt;" required></textarea>
+      </div>
+    </div>
+    <button class="btn purple" type="submit" style="margin-top:10px">➕ Add Filter</button>
+  </form>
+  {% if filters %}
+  <div class="table-wrap" style="margin-top:16px">
+  <table>
+    <tr><th>Name</th><th>Message Preview</th><th>Action</th></tr>
+    {% for f in filters %}
+    <tr>
+      <td class="mono">{{f.filter_name}}</td>
+      <td>{{(f.filter_message[:60] + '...') if f.filter_message and f.filter_message|length > 60 else f.filter_message}}</td>
+      <td>
+        <form class="inline" method="post" action="{{url_for('group_filter_remove', chat_id=g.chat_id)}}">
+          <input type="hidden" name="filter_name" value="{{f.filter_name}}">
+          <button class="btn sm red" type="submit">🗑️ Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</div>
+</div>{# end filters tab #}
+
+{# ==================== WELCOME TAB ==================== #}
+<div id="tab-welcome" class="tab-content" style="display:none">
+<div class="section">
+  <h2>👋 Welcome Message</h2>
+  <form method="post" action="{{url_for('group_welcome_save', chat_id=g.chat_id)}}">
+    <label>Welcome Message (supports formatting + placeholders)</label>
+    <textarea name="welcome_message" placeholder="স্বাগতম &lt;mention&gt;! 🎉&#10;গ্রুপের নিয়ম মেনে চলুন।&#10;[btn:Rules]&lt;https://t.me/rules&gt;" style="min-height:100px">{{welcome.welcome_message or ''}}</textarea>
+    <div class="flex-row" style="margin-top:10px">
+      <button class="btn green" type="submit">💾 Save Welcome</button>
+      <label style="margin:0;display:flex;align-items:center;gap:6px">
+        <input type="checkbox" name="welcome_enabled" value="1" {{'checked' if welcome.welcome_enabled else ''}} style="width:auto">
+        Enabled
+      </label>
+    </div>
+  </form>
+  {% if welcome.welcome_message %}
+  <div style="margin-top:14px;padding:12px;background:var(--card2);border-radius:8px;border:1px solid var(--border)">
+    <strong>Current Welcome:</strong><br>
+    <span class="muted">{{welcome.welcome_message[:200]}}</span>
+  </div>
+  {% endif %}
+</div>
+</div>{# end welcome tab #}
+
+{# ==================== PROMOTE TAB ==================== #}
+<div id="tab-promote" class="tab-content" style="display:none">
+<div class="section">
+  <h2>📢 Promote / Force-Join Links</h2>
+  <p class="muted" style="margin-bottom:10px">Non-admin মেসেজ পাঠালে এই চ্যানেলে join করতে বলবে। Bot চ্যানেলে admin হতে হবে।</p>
+  <form method="post" action="{{url_for('group_promote_add', chat_id=g.chat_id)}}">
+    <div class="grid" style="grid-template-columns:1fr 2fr;align-items:end">
+      <div>
+        <label>Duration (empty = unlimited)</label>
+        <input type="text" name="duration" placeholder="1d, 7d, or empty">
+      </div>
+      <div>
+        <label>Channel/Group Link</label>
+        <input type="text" name="channel_link" placeholder="https://t.me/mychannel" required>
+      </div>
+    </div>
+    <button class="btn orange" type="submit" style="margin-top:10px">➕ Add Promote Link</button>
+  </form>
+  {% if promote_links %}
+  <div class="table-wrap" style="margin-top:16px">
+  <table>
+    <tr><th>Link</th><th>Expiry</th><th>Status</th><th>Action</th></tr>
+    {% for p in promote_links %}
+    <tr>
+      <td><a href="{{p.link}}" target="_blank">{{p.link[:40]}}</a></td>
+      <td>{% if p.is_unlimited %}<span class="muted">unlimited</span>{% elif p.expiry_ts %}{{humanize((p.expiry_ts - now)|int) if p.expiry_ts > now else 'expired'}}{% else %}<span class="muted">unlimited</span>{% endif %}</td>
+      <td>{% if p.active %}<span class="badge ok">Active</span>{% else %}<span class="badge no">Inactive</span>{% endif %}</td>
+      <td>
+        <form class="inline" method="post" action="{{url_for('group_promote_remove', chat_id=g.chat_id)}}">
+          <input type="hidden" name="link_id" value="{{p.id}}">
+          <button class="btn sm red" type="submit">🗑️ Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</div>
+</div>{# end promote tab #}
+
+{# ==================== BANNED KEYWORDS TAB ==================== #}
+<div id="tab-banned" class="tab-content" style="display:none">
+<div class="section">
+  <h2>🚫 Banned Keywords</h2>
+  <p class="muted" style="margin-bottom:10px">এই শব্দগুলো থাকলে মেসেজ ডিলিট হবে এবং action execute হবে।</p>
+  <form method="post" action="{{url_for('group_banned_add', chat_id=g.chat_id)}}">
+    <div class="grid" style="grid-template-columns:1fr 1fr 1fr;align-items:end">
+      <div>
+        <label>Keyword</label>
+        <input type="text" name="keyword" placeholder="spam" required>
+      </div>
+      <div>
+        <label>Action</label>
+        <select name="action">
+          <option value="mute">Mute</option>
+          <option value="ban">Ban</option>
+          <option value="kick">Kick</option>
+          <option value="tmute">Timed Mute</option>
+        </select>
+      </div>
+      <div>
+        <label>Duration (tmute only)</label>
+        <input type="text" name="duration" placeholder="1h, 30m">
+      </div>
+    </div>
+    <button class="btn red" type="submit" style="margin-top:10px">➕ Add Banned Keyword</button>
+  </form>
+  {% if banned_keywords %}
+  <div class="table-wrap" style="margin-top:16px">
+  <table>
+    <tr><th>Keyword</th><th>Action</th><th>Duration</th><th>Action</th></tr>
+    {% for b in banned_keywords %}
+    <tr>
+      <td class="mono">{{b.keyword}}</td>
+      <td><span class="badge {{b.action}}">{{b.action|upper}}</span></td>
+      <td>{{humanize(b.tmute_seconds) if b.tmute_seconds and b.action=='tmute' else '-'}}</td>
+      <td>
+        <form class="inline" method="post" action="{{url_for('group_banned_remove', chat_id=g.chat_id)}}">
+          <input type="hidden" name="keyword" value="{{b.keyword}}">
+          <button class="btn sm red" type="submit">🗑️ Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</div>
+</div>{# end banned tab #}
+
+{# ==================== PROTECTION TAB ==================== #}
+<div id="tab-protection" class="tab-content" style="display:none">
+<div class="section">
+  <h2>🛡️ Protection System</h2>
+  <p class="muted" style="margin-bottom:10px">নতুন member join করলে protection mute করবে এবং admin কে notify করবে। Admin unmute করতে পারবে।</p>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+    <div class="card">
+      <h2>Protection Status</h2>
+      <div class="big" style="font-size:16px">
+        {% if protection.protection_enabled %}<span class="badge ok">ON</span>{% else %}<span class="badge no">OFF</span>{% endif %}
+      </div>
+    </div>
+    <div class="card">
+      <h2>Protection Type</h2>
+      <div class="big" style="font-size:16px">{{protection.protection_type or 'admin'}}</div>
+    </div>
+    <div class="card">
+      <h2>Protection Admin</h2>
+      <div class="big" style="font-size:16px" class="mono">{{protection.protection_admin or 'not set'}}</div>
+    </div>
+  </div>
+  <form method="post" action="{{url_for('group_protection_save', chat_id=g.chat_id)}}" style="margin-top:14px">
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));align-items:end">
+      <div>
+        <label>Protection Admin ID</label>
+        <input type="text" name="protection_admin" placeholder="123456789" value="{{protection.protection_admin or ''}}">
+      </div>
+      <div>
+        <label>Protection Type</label>
+        <select name="protection_type">
+          <option value="admin" {{'selected' if (protection.protection_type or 'admin')=='admin'}}>Admin (admins unmute)</option>
+          <option value="user" {{'selected' if protection.protection_type=='user'}}>User (self unmute)</option>
+        </select>
+      </div>
+      <div>
+        <label>Enabled</label>
+        <select name="protection_enabled">
+          <option value="1" {{'selected' if protection.protection_enabled}}>ON</option>
+          <option value="0" {{'selected' if not protection.protection_enabled}}>OFF</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn" type="submit" style="margin-top:14px">💾 Save Protection</button>
+  </form>
+  <hr style="margin:18px 0;border:none;border-top:1px solid rgba(255,255,255,.1)">
+  <h2>🧹 Clean Service</h2>
+  <p class="muted" style="margin-bottom:10px">ON করলে নতুন মেম্বার join/leave এর Telegram ডিফল্ট সার্ভিস মেসেজ অটো ডিলিট হবে। গ্রুপে <code>/cleanservice on</code> বা <code>/cleanservice off</code> দিয়েও কন্ট্রোল করা যায়।</p>
+  <form method="post" action="{{url_for('group_cleanservice_save', chat_id=g.chat_id)}}">
+    <div class="flex-row" style="align-items:end;gap:12px">
+      <div>
+        <label>Clean Service</label>
+        <select name="cleanservice_enabled">
+          <option value="1" {{'selected' if cleanservice}}>ON</option>
+          <option value="0" {{'selected' if not cleanservice}}>OFF</option>
+        </select>
+      </div>
+      <button class="btn" type="submit" style="margin-top:14px">💾 Save</button>
+    </div>
+  </form>
+</div>
+</div>{# end protection tab #}
+
+{# ==================== FORWARD PROTECTION TAB ==================== #}
+<div id="tab-forward" class="tab-content" style="display:none">
+<div class="section">
+  <h2>↗️ Forward Protection</h2>
+  <p class="muted" style="margin-bottom:12px">ON করলে কেউ এই গ্রুপে message forward করলে সেটি অটো-ডিলিট হবে, ইউজার ৫ মিনিট mute হবে, এবং notify করা হবে। বট কমান্ড <code>/forwardprotection on</code> / <code>/off</code> দিয়েও কন্ট্রোল করা যায়। AI-কেও বলা যায়।</p>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+    <div class="card">
+      <h2>Forward Protection</h2>
+      <div class="big" style="font-size:18px">
+        {% if forward_prot %}<span class="badge ok">🟢 ON</span>{% else %}<span class="badge no">🔴 OFF</span>{% endif %}
+      </div>
+    </div>
+    <div class="card">
+      <h2>Mute Duration</h2>
+      <div class="big" style="font-size:18px">5 min</div>
+    </div>
+  </div>
+  <form method="post" action="{{url_for('group_forward_protection_save', chat_id=g.chat_id)}}" style="margin-top:14px">
+    <div class="flex-row" style="align-items:end;gap:12px">
+      <div>
+        <label>Forward Protection</label>
+        <select name="forward_protection_enabled">
+          <option value="1" {{'selected' if forward_prot}}>ON — Delete + Mute 5 min</option>
+          <option value="0" {{'selected' if not forward_prot}}>OFF — Allow forwards</option>
+        </select>
+      </div>
+      <button class="btn" type="submit" style="margin-top:14px">💾 Save</button>
+    </div>
+  </form>
+</div>
+</div>{# end forward tab #}
+
+{# ==================== GROUP LOCK TAB ==================== #}
+<div id="tab-lock" class="tab-content" style="display:none">
+<div class="section">
+  <h2>🔒 Group Lock / Unlock</h2>
+  <p class="muted" style="margin-bottom:12px">গ্রুপ lock করলে কেউ মেসেজ, স্টিকার, ইমোজি কিছুই পাঠাতে পারবে না। Unlock করলে সব permission ফিরে আসবে। বট কমান্ড <code>/off</code> (lock) ও <code>/on</code> (unlock) দিয়েও কন্ট্রোল করা যায়। সময় দিলে (যেমন <code>/off 2 hours</code>) সেই সময় পর অটো-unlock হবে।</p>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+    <div class="card">
+      <h2>Lock Status</h2>
+      <div class="big" style="font-size:18px">
+        {% if lock_info and lock_info.locked %}<span class="badge no">🔒 LOCKED</span>{% else %}<span class="badge ok">🟢 UNLOCKED</span>{% endif %}
+      </div>
+    </div>
+    <div class="card">
+      <h2>Locked By</h2>
+      <div class="big" style="font-size:16px">{{lock_info.locked_by_name if lock_info and lock_info.locked_by_name else '—'}}</div>
+    </div>
+    <div class="card">
+      <h2>Auto-Unlock</h2>
+      <div class="big" style="font-size:16px">
+        {% if lock_info and lock_info.locked and lock_info.locked_until %}
+          {% set remaining = (lock_info.locked_until - now)|int %}
+          {% if remaining > 0 %}
+            {{humanize_seconds(remaining)}}
+          {% else %}
+            Expired
+          {% endif %}
+        {% else %}
+          —
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% if lock_info and lock_info.locked and lock_info.reason %}
+  <p class="muted" style="margin-top:10px">📝 Reason: {{lock_info.reason}}</p>
+  {% endif %}
+
+  <hr class="hr-soft">
+  <div class="flex-row" style="gap:14px">
+    <form method="post" action="{{url_for('group_lock_save', chat_id=g.chat_id)}}" style="flex:1;min-width:200px">
+      <input type="hidden" name="lock_action" value="off">
+      <label>Lock Duration (ঐচ্ছিক — ফাঁকা রাখলে permanent)</label>
+      <input type="text" name="lock_duration" placeholder="যেমন: 30 minutes / 2 hours / 1 day">
+      <button class="btn red" type="submit" style="margin-top:10px;width:100%">🔒 Lock Group</button>
+    </form>
+    <form method="post" action="{{url_for('group_lock_save', chat_id=g.chat_id)}}" style="flex:1;min-width:200px">
+      <input type="hidden" name="lock_action" value="on">
+      <label>&nbsp;</label>
+      <div style="height:42px"></div>
+      <button class="btn green" type="submit" style="margin-top:10px;width:100%">🟢 Unlock Group</button>
+    </form>
+  </div>
+  <p class="muted" style="margin-top:12px">⏱️ সময়ের ফরম্যাট: <code>30 minutes</code>, <code>2 hours</code>, <code>1 day</code>, অথবা নির্দিষ্ট তারিখ <code>25 dec</code>। ফাঁকা রাখলে স্থায়ী lock।</p>
+</div>
+</div>{# end lock tab #}
+
+
+<script src="https://sites.super.myninja.ai/_assets/ninja-daytona-script.js"></script>
+{# ==================== MENTION TAB ==================== #}
+<div id="tab-mention" class="tab-content" style="display:none">
+<div class="section">
+  <h2>📢 Mention Protection</h2>
+  <p class="muted" style="margin-bottom:10px">@mention করলে মেসেজ ডিলিট হবে এবং action হবে। Admin/Owner mention করতে পারবে।</p>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+    <div class="card">
+      <h2>Status</h2>
+      <div class="big" style="font-size:16px">
+        {% if mention.mention_enabled %}<span class="badge ok">ON</span>{% else %}<span class="badge no">OFF</span>{% endif %}
+      </div>
+    </div>
+    <div class="card">
+      <h2>Action</h2>
+      <div class="big" style="font-size:16px">{{mention.mention_action or 'none'}}</div>
+    </div>
+  </div>
+  <form method="post" action="{{url_for('group_mention_save', chat_id=g.chat_id)}}" style="margin-top:14px">
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));align-items:end">
+      <div>
+        <label>Enabled</label>
+        <select name="mention_enabled">
+          <option value="1" {{'selected' if mention.mention_enabled}}>ON</option>
+          <option value="0" {{'selected' if not mention.mention_enabled}}>OFF</option>
+        </select>
+      </div>
+      <div>
+        <label>Action</label>
+        <select name="mention_action">
+          <option value="none" {{'selected' if (mention.mention_action or 'none')=='none'}}>None (delete only)</option>
+          <option value="mute" {{'selected' if mention.mention_action=='mute'}}>Mute</option>
+          <option value="ban" {{'selected' if mention.mention_action=='ban'}}>Ban</option>
+          <option value="tmute" {{'selected' if mention.mention_action=='tmute'}}>Timed Mute</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn" type="submit" style="margin-top:14px">💾 Save Mention Settings</button>
+  </form>
+</div>
+</div>{# end mention tab #}
+
+<script>
+function switchTab(e,tabId){
+  e.preventDefault();
+  document.querySelectorAll('.tab-content').forEach(el=>el.style.display='none');
+  document.querySelectorAll('.tab-bar a').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-'+tabId).style.display='block';
+  e.target.classList.add('active');
+}
+function simplePost(form,e){e.preventDefault();fetch(form.action,{method:'POST',credentials:'same-origin'}).then(r=>r.json()).then(d=>{if(d.ok) location.reload(); else alert(d.error||'error');}).catch(()=>location.reload());return false;}
+function revokeAction(form,e){e.preventDefault();var fd=new FormData(form);fetch(form.action,{method:'POST',body:fd,credentials:'same-origin'}).then(r=>r.json()).then(d=>{if(d.ok) location.reload(); else alert(d.error||'error');}).catch(()=>location.reload());return false;}
+function doLookup(){
+  var id=document.getElementById('lookup_id').value.trim();
+  var box=document.getElementById('lookup_result');
+  if(!id||!/^-?\d+$/.test(id)){box.innerHTML='<div class="err">সঠিক User ID দিন।</div>';return;}
+  box.innerHTML='<div class="muted">🔎 খুঁজছি...</div>';
+  var fd=new FormData();fd.append('user_id',id);
+  fetch('/user_lookup',{method:'POST',body:fd,credentials:'same-origin'}).then(r=>r.json()).then(d=>{
+    if(!d.ok){box.innerHTML='<div class="err">❌ '+((d.error||'পাওয়া যায়নি').toString().replace(/[<>&]/g,function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c];}))+'</div>';return;}
+    var esc=function(s){return (s||'').toString().replace(/[<>&]/g,function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c];});};
+    var html='<div class="ucard">';
+    if(d.photo_url){html+='<img class="avatar" src="'+esc(d.photo_url)+'" onerror="this.style.display=\'none\'">';}
+    else{html+='<div class="ph">👤</div>';}
+    html+='<div class="info"><div class="nm">'+esc(d.name)+'</div>';
+    html+='<div class="row">User ID: <span class="mono">'+esc(d.user_id)+'</span></div>';
+    html+='<div class="row">Username: <span>'+(d.username?'@'+esc(d.username):'-')+'</span></div>';
+    if(d.bio){html+='<div class="row">Bio: <span>'+esc(d.bio)+'</span></div>';}
+    html+='</div></div>';
+    if(d.actions && d.actions.length){
+      html+='<div class="table-wrap" style="margin-top:12px"><table><tr><th>Chat ID</th><th>Action</th><th>Reason</th><th>Active</th></tr>';
+      d.actions.forEach(function(a){html+='<tr><td class="mono">'+esc(a.chat_id)+'</td><td><span class="badge '+a.action+'">'+a.action.toUpperCase()+'</span></td><td>'+esc(a.reason||'-')+'</td><td>'+(a.active?'✅':'❌')+'</td></tr>';});
+      html+='</table></div>';
+    } else { html+='<p class="muted" style="margin-top:10px">কোনো অ্যাক্টিভ অ্যাকশন নেই।</p>'; }
+    box.innerHTML=html;
+  }).catch(()=>{box.innerHTML='<div class="err">Lookup ব্যর্থ।</div>';});
+}
+function quickMod(userId, action){
+  if(!userId || !action) return;
+  var labels = {mute:'মিউট', unmute:'আনমিউট', ban:'ব্যান', unban:'আনব্যান', kick:'কিক', tmute:'টাইমড মিউট'};
+  if(!confirm('নিশ্চিত? User ID '+userId+' কে '+labels[action]+' করতে চান?')) return;
+  var fd = new FormData();
+  fd.append('user_id', userId);
+  fd.append('action', action);
+  fetch('{{url_for("group_moderate", chat_id=g.chat_id)}}', {method:'POST', body:fd, credentials:'same-origin'})
+    .then(r=>r.json()).then(d=>{
+      if(d.ok){ alert('✅ '+labels[action]+' সফল হয়েছে।'); location.reload(); }
+      else { alert('❌ '+(d.error||'ব্যর্থ হয়েছে।')); }
+    }).catch(()=>alert('❌ নেটওয়ার্ক ত্রুটি।'));
+}
+function lookupUser(userId){
+  if(!userId) return;
+  document.getElementById('lookup_id').value = userId;
+  document.querySelectorAll('.tab-bar a').forEach(a=>a.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>t.style.display='none');
+  document.getElementById('tab-moderation').style.display='block';
+  document.querySelector('.tab-bar a[href="#moderation"]').classList.add('active');
+  doLookup();
+  document.getElementById('lookup_result').scrollIntoView({behavior:'smooth'});
+}
+</script>
+{% endblock %}
+
+<script src="https://sites.super.myninja.ai/_assets/ninja-daytona-script.js"></script>
